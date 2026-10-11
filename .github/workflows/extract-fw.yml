@@ -53,7 +53,7 @@ jobs:
 
       - name: Install xiaomi-flashable-firmware-creator
         run: |
-          uv tool install --python 3.15 xiaomi-flashable-firmware-creator
+          uv tool install --python 3.15 "xiaomi-flashable-firmware-creator==2.3.2"
           # 或者用 pip：
           # pip install xiaomi-flashable-firmware-creator
 
