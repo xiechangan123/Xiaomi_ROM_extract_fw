@@ -41,7 +41,7 @@ jobs:
       - name: Install payload-dumper-go
         run: |
           # 官方推荐工具
-          curl -sL https://github.com/ssut/payload-dumper-go/releases/latest/download/payload-dumper-go_linux_amd64.tar.gz | tar xz
+          curl -sL https://github.com/ssut/payload-dumper-go/releases/download/2.1.0/payload-dumper-go_2.1.0_linux_amd64.tar.gz | tar xz
           sudo mv payload-dumper-go /usr/local/bin/
           payload-dumper-go --version || true
 
