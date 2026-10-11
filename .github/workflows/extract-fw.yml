@@ -1,0 +1,114 @@
+name: Extract Xiaomi Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      rom_url:
+        description: '小米 ROM 直链（必须是 .zip 的直接下载链接）'
+        required: true
+        type: string
+      mode:
+        description: '提取模式'
+        required: true
+        type: choice
+        options:
+          - firmware      # 普通 fw（推荐）
+          - nonarb        # 去除 Anti-Rollback 的 fw
+          - vendor        # fw + vendor
+          - firmwareless  # 去掉 fw 后的完整 ROM
+        default: firmware
+      output_name:
+        description: '输出文件名前缀（可选）'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    # 大 ROM 需要更多磁盘，可选更大 runner（需要付费）
+    # runs-on: ubuntu-latest-4-cores
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xz-utils
+
+      - name: Install payload-dumper-go
+        run: |
+          # 官方推荐工具
+          curl -sL https://github.com/ssut/payload-dumper-go/releases/latest/download/payload-dumper-go_linux_amd64.tar.gz | tar xz
+          sudo mv payload-dumper-go /usr/local/bin/
+          payload-dumper-go --version || true
+
+      - name: Set up Python + uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          enable-cache: true
+
+      - name: Install xiaomi-flashable-firmware-creator
+        run: |
+          uv tool install xiaomi-flashable-firmware-creator
+          # 或者用 pip：
+          # pip install xiaomi-flashable-firmware-creator
+
+      - name: Download ROM
+        id: download
+        run: |
+          mkdir -p rom
+          echo "正在下载 ROM..."
+          # 使用 curl 支持大文件和重定向
+          curl -L --fail --retry 3 --retry-delay 5 \
+            -o rom/rom.zip \
+            "${{ inputs.rom_url }}"
+          
+          echo "下载完成，文件大小："
+          ls -lh rom/rom.zip
+
+      - name: Extract Firmware
+        id: extract
+        run: |
+          MODE="${{ inputs.mode }}"
+          case $MODE in
+            firmware)     FLAG="-F" ;;
+            nonarb)       FLAG="-N" ;;
+            vendor)       FLAG="-V" ;;
+            firmwareless) FLAG="-L" ;;
+            *)            FLAG="-F" ;;
+          esac
+
+          mkdir -p output
+          echo "开始提取，模式: $MODE ($FLAG)"
+          
+          # 工具支持本地路径或远程直链
+          xiaomi_flashable_firmware_creator $FLAG rom/rom.zip -o output
+          
+          echo "提取完成，输出文件："
+          ls -lh output/
+
+          # 记录生成的文件名
+          GENERATED=$(ls output/*.zip | head -1)
+          echo "generated=$GENERATED" >> $GITHUB_OUTPUT
+          echo "生成的文件: $GENERATED"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: xiaomi-fw-${{ inputs.mode }}-${{ github.run_id }}
+          path: output/*.zip
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Summary
+        run: |
+          echo "### 提取成功 ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **模式**: \`${{ inputs.mode }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **ROM 链接**: ${{ inputs.rom_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **输出文件**: \`$(ls output/*.zip)\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "请在 **Artifacts** 中下载生成的 zip 文件。" >> $GITHUB_STEP_SUMMARY
